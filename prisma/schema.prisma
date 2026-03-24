@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Deporte {
+  futbol
+  padel
+}
+
+enum TipoAccion {
+  informativo
+  sistema_reservar
+  sistema_turnos
+  sistema_ia
+}
+
+enum EstadoTurno {
+  pendiente
+  confirmado
+}
+
+model Cancha {
+  id                Int             @id @default(autoincrement())
+  nombre            String
+  tipo              Deporte
+  createdAt         DateTime        @default(now()) @map("created_at")
+  turnos            Turno[]
+  estadosUsuarios   EstadoUsuario[] @relation("EstadoUsuarioCancha")
+
+  @@map("canchas")
+}
+
+model MenuDinamico {
+  id             Int         @id @default(autoincrement())
+  numeroOpcion   Int         @unique @map("numero_opcion")
+  titulo         String
+  tipoAccion     TipoAccion  @map("tipo_accion")
+  textoRespuesta String?     @map("texto_respuesta")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@map("menu_dinamico")
+}
+
+model EstadoUsuario {
+  numeroWhatsapp  String   @id @map("numero_whatsapp")
+  estado          String   @default("INICIO")
+  deporteElegido  Deporte? @map("deporte_elegido")
+  fechaElegida    DateTime? @db.Date @map("fecha_elegida")
+  horaElegida     String?  @map("hora_elegida")
+  canchaElegidaId Int?     @map("cancha_elegida_id")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+  canchaElegida   Cancha?  @relation("EstadoUsuarioCancha", fields: [canchaElegidaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([updatedAt(sort: Desc)], map: "idx_estados_updated_at")
+  @@map("estados_usuarios")
+}
+
+model MediaFile {
+  id            String   @id
+  filename      String
+  mimeType      String   @map("mime_type")
+  contentBase64 String   @map("content_base64")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("media_files")
+}
+
+model Turno {
+  id              Int         @id @default(autoincrement())
+  numeroWhatsapp  String      @map("numero_whatsapp")
+  deporte         Deporte
+  fecha           DateTime    @db.Date
+  hora            String
+  canchaId        Int         @map("cancha_id")
+  estado          EstadoTurno @default(pendiente)
+  comprobanteUrl  String?     @map("comprobante_url")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  cancha          Cancha      @relation(fields: [canchaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([fecha, estado], map: "idx_turnos_fecha_estado")
+  @@index([numeroWhatsapp], map: "idx_turnos_numero")
+  @@map("turnos")
+}

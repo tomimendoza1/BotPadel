@@ -5,7 +5,12 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node src/server.js"
+    "dev": "node src/server.js",
+    "prisma:generate": "npx prisma generate",
+    "prisma:migrate": "npx prisma migrate dev --name init",
+    "prisma:deploy": "npx prisma migrate deploy",
+    "prisma:studio": "npx prisma studio",
+    "prisma:seed": "node prisma/seed.js"
   },
   "keywords": [
     "whatsapp",
@@ -26,6 +31,11 @@
     "express-session": "^1.19.0",
     "fastify": "^5.7.4",
     "ioredis": "^5.9.3",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "@prisma/client": "^7.0.0",
+    "@prisma/adapter-pg": "^7.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^7.0.0"
   }
 }
