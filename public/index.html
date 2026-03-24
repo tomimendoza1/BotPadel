@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel de Reservas | WhatsApp Bot</title>
+  <meta name="description" content="Panel de administración para reservas, canchas y menú dinámico de WhatsApp." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-badge">WA</div>
+        <div>
+          <p class="eyebrow">Panel Admin</p>
+          <h1>Complejo Deportivo</h1>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-link active" data-section="overview">Resumen</button>
+        <button class="nav-link" data-section="reservations">Reservas</button>
+        <button class="nav-link" data-section="courts">Canchas</button>
+        <button class="nav-link" data-section="menu">Menú bot</button>
+        <button class="nav-link" data-section="manual">Alta manual</button>
+      </nav>
+
+      <div class="sidebar-card">
+        <p class="sidebar-card__title">Listo para producción</p>
+        <p class="sidebar-card__text">Pensado para Neon + Vercel, sin sesiones en memoria ni archivos volátiles.</p>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Administración</p>
+          <h2 id="section-title">Resumen general</h2>
+        </div>
+        <div class="topbar-actions">
+          <button class="ghost-btn" id="refresh-all">Actualizar</button>
+          <button class="danger-btn" id="logout-btn">Cerrar sesión</button>
+        </div>
+      </header>
+
+      <section class="login-card" id="login-screen">
+        <div class="login-card__content">
+          <p class="eyebrow">Acceso seguro</p>
+          <h3>Entrá al panel</h3>
+          <p class="muted">Administrá reservas, comprobantes, canchas y respuestas del bot desde un solo lugar.</p>
+          <form id="login-form" class="login-form">
+            <label>
+              <span>Contraseña</span>
+              <input id="password-input" type="password" placeholder="Ingresá la contraseña de admin" autocomplete="current-password" />
+            </label>
+            <button type="submit" class="primary-btn">Ingresar</button>
+          </form>
+        </div>
+        <div class="login-card__visual">
+          <div class="visual-orb visual-orb--one"></div>
+          <div class="visual-orb visual-orb--two"></div>
+          <div class="visual-panel">
+            <span>Reservas por WhatsApp</span>
+            <strong>Control total</strong>
+            <small>Menú dinámico, canchas, comprobantes y altas manuales.</small>
+          </div>
+        </div>
+      </section>
+
+      <div id="app-shell" class="app-shell hidden">
+        <section class="section active" id="section-overview">
+          <div class="stats-grid" id="stats-grid"></div>
+
+          <div class="grid-two">
+            <article class="panel-card">
+              <div class="panel-card__head">
+                <div>
+                  <p class="eyebrow">Estado del sistema</p>
+                  <h3>Qué está pasando</h3>
+                </div>
+              </div>
+              <ul class="status-list">
+                <li><span class="status-dot status-dot--success"></span> Backend listo para Vercel</li>
+                <li><span class="status-dot status-dot--info"></span> Comprobantes guardados en base de datos</li>
+                <li><span class="status-dot status-dot--warning"></span> Revisá que Meta use el nuevo webhook al desplegar</li>
+              </ul>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-card__head">
+                <div>
+                  <p class="eyebrow">Acciones rápidas</p>
+                  <h3>Lo más usado</h3>
+                </div>
+              </div>
+              <div class="quick-actions">
+                <button class="secondary-btn" data-go="reservations">Ver pendientes</button>
+                <button class="secondary-btn" data-go="manual">Cargar reserva</button>
+                <button class="secondary-btn" data-go="menu">Editar respuestas</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="section-reservations">
+          <div class="section-header-row">
+            <div>
+              <p class="eyebrow">Reservas</p>
+              <h3>Turnos y comprobantes</h3>
+            </div>
+            <div class="filters-inline">
+              <input type="date" id="filter-date" />
+              <button class="ghost-btn" id="clear-filter">Limpiar filtro</button>
+              <button class="primary-btn" id="reload-reservations">Recargar</button>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Hora</th>
+                    <th>Cancha</th>
+                    <th>Deporte</th>
+                    <th>WhatsApp</th>
+                    <th>Comprobante</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="reservations-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="section-courts">
+          <div class="grid-two">
+            <article class="panel-card">
+              <div class="panel-card__head">
+                <div>
+                  <p class="eyebrow">Agregar cancha</p>
+                  <h3>Nueva cancha</h3>
+                </div>
+              </div>
+              <form id="court-form" class="stack-form">
+                <label>
+                  <span>Nombre</span>
+                  <input id="court-name" type="text" placeholder="Ej: Cancha 1" />
+                </label>
+                <label>
+                  <span>Tipo</span>
+                  <select id="court-type">
+                    <option value="futbol">Fútbol</option>
+                    <option value="padel">Pádel</option>
+                  </select>
+                </label>
+                <button type="submit" class="primary-btn">Guardar cancha</button>
+              </form>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-card__head">
+                <div>
+                  <p class="eyebrow">Canchas actuales</p>
+                  <h3>Edición rápida</h3>
+                </div>
+              </div>
+              <div class="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Tipo</th>
+                      <th>Guardar</th>
+                    </tr>
+                  </thead>
+                  <tbody id="courts-body"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="section-menu">
+          <div class="grid-two">
+            <article class="panel-card">
+              <div class="panel-card__head">
+                <div>
+                  <p class="eyebrow">Agregar opción</p>
+                  <h3>Nuevo item informativo</h3>
+                </div>
+              </div>
+              <form id="menu-form" class="stack-form">
+                <label>
+                  <span>Número</span>
+                  <input id="menu-number" type="number" min="1" placeholder="Ej: 4" />
+                </label>
+                <label>
+                  <span>Título</span>
+                  <input id="menu-title-input" type="text" placeholder="Ej: Horarios de atención" />
+                </label>
+                <label>
+                  <span>Respuesta</span>
+                  <textarea id="menu-response" rows="5" placeholder="Texto que responderá el bot..."></textarea>
+                </label>
+                <button type="submit" class="primary-btn">Crear opción</button>
+              </form>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-card__head">
+                <div>
+                  <p class="eyebrow">Menú actual</p>
+                  <h3>Editar respuestas</h3>
+                </div>
+              </div>
+              <div class="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>N°</th>
+                      <th>Título</th>
+                      <th>Respuesta</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="menu-body"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="section-manual">
+          <div class="grid-two">
+            <article class="panel-card">
+              <div class="panel-card__head">
+                <div>
+                  <p class="eyebrow">Alta directa</p>
+                  <h3>Crear reserva manual</h3>
+                </div>
+              </div>
+              <form id="manual-booking-form" class="stack-form">
+                <label>
+                  <span>Número de WhatsApp</span>
+                  <input id="manual-phone" type="text" placeholder="Ej: 5492215123456" />
+                </label>
+                <label>
+                  <span>Deporte</span>
+                  <select id="manual-sport">
+                    <option value="futbol">Fútbol</option>
+                    <option value="padel">Pádel</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Fecha</span>
+                  <input id="manual-date" type="date" />
+                </label>
+                <label>
+                  <span>Hora</span>
+                  <input id="manual-time" type="time" />
+                </label>
+                <label>
+                  <span>Cancha</span>
+                  <select id="manual-court"></select>
+                </label>
+                <button type="submit" class="primary-btn">Crear reserva confirmada</button>
+              </form>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-card__head">
+                <div>
+                  <p class="eyebrow">Tip</p>
+                  <h3>Formato recomendado</h3>
+                </div>
+              </div>
+              <div class="tip-box">
+                <p>Podés pegar el número tal como llega desde WhatsApp. El backend lo normaliza automáticamente para Argentina.</p>
+                <p>Ejemplo: <strong>5492215123456</strong> o <strong>+54 9 221 512-3456</strong>.</p>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

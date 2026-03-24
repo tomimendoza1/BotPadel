@@ -1,14 +1,31 @@
 {
+  "name": "whatsapp-bot",
+  "version": "2.0.0",
+  "description": "Bot de WhatsApp con panel admin para reservas, compatible con Neon y Vercel.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "vercel",
+    "neon",
+    "reservas"
+  ],
+  "author": "German",
+  "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "axios": "^1.13.6",
-    "bullmq": "^5.71.0",
+    "axios": "^1.13.5",
+    "bullmq": "^5.70.1",
     "dayjs": "^1.11.20",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
-    "fastify": "^5.8.4",
-    "ioredis": "^5.10.1",
+    "fastify": "^5.7.4",
+    "ioredis": "^5.9.3",
     "pg": "^8.20.0"
   }
 }
