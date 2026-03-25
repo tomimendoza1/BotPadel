@@ -292,12 +292,21 @@ async function updateBookingStatus(id, accion) {
 	if (!confirm(`¿Seguro que querés ${label} esta reserva?`)) return;
 
 	try {
-		await api(`/api/reservas/${bookingId}/estado`, {
-			method: "POST",
-			body: JSON.stringify({ accion })
-		});
+const result = await api(`/api/reservas/${bookingId}/estado`, {
+  method: "POST",
+  body: JSON.stringify({ accion })
+});
 
-		showToast(`Reserva ${label === "aprobar" ? "aprobada" : "rechazada"}.`);
+const accionTexto = label === "aprobar" ? "aprobada" : "rechazada";
+
+if (result?.whatsapp?.sent) {
+  showToast(`Reserva ${accionTexto}. WhatsApp enviado.`);
+} else {
+  showToast(
+    `Reserva ${accionTexto}, pero WhatsApp no se envió. ${result?.whatsapp?.error || ""}`,
+    "error"
+  );
+}
 		await Promise.all([loadReservations(), loadSummary()]);
 	} catch (error) {
 		showToast(error.message, "error");
