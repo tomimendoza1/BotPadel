@@ -69,7 +69,7 @@ async function askAssistant(prompt) {
 			return "Ahora mismo no tengo disponible la respuesta automática. Escribinos y te ayudamos con la reserva.";
 		}
 
-		const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+		const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 		const result = await model.generateContent(prompt);
 		const response = await result.response;
 		const text = response.text();
@@ -150,286 +150,393 @@ async function upsertUserState(number, nextState, extraFields = {}) {
 }
 
 async function handleIncomingWhatsappMessage(req, res) {
-  res.sendStatus(200);
+	res.sendStatus(200);
 
-  await bootstrapSystemData();
+	const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+	if (!msg) return;
 
-  const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-  if (!msg) return;
+	await bootstrapSystemData();
 
-  const text = msg.text?.body?.trim().toLowerCase() || "";
-  const msgType = msg.type;
-  const normalizedNumber = normalizeArgentinaWhatsappNumber(msg.from);
+	const rawNumber = String(msg.from || "").replace(/\D/g, "");
+	const text = typeof msg.text?.body === "string"
+		? msg.text.body.trim().toLowerCase()
+		: "";
+	const msgType = msg.type;
 
-  const userResult = await query("SELECT * FROM estados_usuarios WHERE numero_whatsapp = $1", [normalizedNumber]);
-  const user = userResult.rows[0] || { estado: "INICIO" };
+	const userResult = await query(
+		"SELECT * FROM estados_usuarios WHERE numero_whatsapp = $1",
+		[rawNumber]
+	);
+	const user = userResult.rows[0] || { estado: "INICIO" };
 
-  if (["hola", "menu", "salir"].includes(text)) {
-    await upsertUserState(normalizedNumber, "INICIO");
-    await sendMainMenu(normalizedNumber);
-    return;
-  }
+	const resetCommands = new Set(["hola", "menu", "menú", "salir", "0"]);
+	const assistantEntryCommands = new Set(["33", "asistente", "ia", "ayuda"]);
 
-  switch (user.estado) {
-    case "INICIO": {
-      const optionNumber = Number(text);
-      if (Number.isInteger(optionNumber) && text.length <= 2) {
-        const optionResult = await query("SELECT * FROM menu_dinamico WHERE numero_opcion = $1", [optionNumber]);
-        const option = optionResult.rows[0];
+	if (msgType === "text" && resetCommands.has(text)) {
+		await upsertUserState(rawNumber, "INICIO");
+		await sendMainMenu(rawNumber);
+		return;
+	}
 
-        if (!option) {
-          await sendWhatsappText(normalizedNumber, "Opción inválida. Elegí un número de la lista.");
-          return;
-        }
+	switch (user.estado) {
+		case "INICIO": {
+			if (msgType !== "text") {
+				await sendMainMenu(rawNumber);
+				return;
+			}
 
-        if (option.tipo_accion === "sistema_reservar") {
-          await upsertUserState(normalizedNumber, "SELECCION_DEPORTE");
-          await sendWhatsappText(normalizedNumber, "Indicame el deporte:\n1. ⚽ Fútbol\n2. 🎾 Pádel");
-          return;
-        }
+			const optionNumber = Number(text);
 
-        if (option.tipo_accion === "sistema_turnos") {
-          const upcomingResult = await query(
-            `
-              SELECT TO_CHAR(fecha, 'DD/MM') AS fecha_corta, hora,
-                     (SELECT nombre FROM canchas WHERE id = cancha_id) AS cancha
-              FROM turnos
-              WHERE numero_whatsapp = $1
-                AND estado = 'confirmado'
-                AND fecha >= CURRENT_DATE
-              ORDER BY fecha, hora
-            `,
-            [normalizedNumber]
-          );
+			if (Number.isInteger(optionNumber) && text.length <= 2) {
+				const optionResult = await query(
+					"SELECT * FROM menu_dinamico WHERE numero_opcion = $1",
+					[optionNumber]
+				);
+				const option = optionResult.rows[0];
 
-          let message = upcomingResult.rows.length
-            ? "📋 *Tus turnos confirmados:*\n"
-            : "No tenés turnos confirmados por ahora.";
+				if (!option) {
+					await sendWhatsappText(rawNumber, "Opción inválida. Elegí un número de la lista.");
+					return;
+				}
 
-          upcomingResult.rows.forEach((row) => {
-            message += `\n📅 ${row.fecha_corta} - ${row.hora} hs (${row.cancha})`;
-          });
+				if (option.tipo_accion === "sistema_reservar") {
+					await upsertUserState(rawNumber, "SELECCION_DEPORTE");
+					await sendWhatsappText(rawNumber, "Indicame el deporte:\n1. ⚽ Fútbol\n2. 🎾 Pádel");
+					return;
+				}
 
-          await sendWhatsappText(normalizedNumber, message);
-          return;
-        }
+				if (option.tipo_accion === "sistema_turnos") {
+					const upcomingResult = await query(
+						`
+							SELECT
+								TO_CHAR(fecha, 'DD/MM') AS fecha_corta,
+								hora,
+								(SELECT nombre FROM canchas WHERE id = cancha_id) AS cancha
+							FROM turnos
+							WHERE numero_whatsapp = $1
+							  AND estado = 'confirmado'
+							  AND fecha >= CURRENT_DATE
+							ORDER BY fecha, hora
+						`,
+						[rawNumber]
+					);
 
-        if (option.tipo_accion === "sistema_ia") {
-          await upsertUserState(normalizedNumber, "HABLANDO_CON_IA");
-          await sendWhatsappText(normalizedNumber, "🤖 *Modo asistente activado*\n\nPreguntame lo que necesites sobre el complejo. Para volver al menú, escribí *salir* o *menu*.");
-          return;
-        }
+					let message = upcomingResult.rows.length
+						? "📋 *Tus turnos confirmados:*\n"
+						: "No tenés turnos confirmados por ahora.";
 
-        await sendWhatsappText(normalizedNumber, option.texto_respuesta || "Sin respuesta configurada.");
-        return;
-      }
+					upcomingResult.rows.forEach((row) => {
+						message += `\n📅 ${row.fecha_corta} - ${row.hora} hs (${row.cancha})`;
+					});
 
-      const reply = await askAssistant(text || "hola", "menu");
-      await sendWhatsappText(normalizedNumber, reply);
-      return;
-    }
+					await sendWhatsappText(rawNumber, message);
+					return;
+				}
 
-    case "HABLANDO_CON_IA": {
-      const reply = await askAssistant(text || "hola", "assistant");
-      await sendWhatsappText(normalizedNumber, reply);
-      return;
-    }
+				if (option.tipo_accion === "sistema_ia") {
+					await upsertUserState(rawNumber, "HABLANDO_CON_IA");
+					await sendWhatsappText(
+						rawNumber,
+						"🤖 *Modo asistente activado*\n\nPreguntame lo que necesites sobre el complejo. Para volver al menú, escribí *menu*."
+					);
+					return;
+				}
 
-    case "SELECCION_DEPORTE": {
-      const sport = text === "1" ? "futbol" : text === "2" ? "padel" : null;
-      if (!sport) {
-        await sendWhatsappText(normalizedNumber, "Escribí 1 para Fútbol o 2 para Pádel.");
-        return;
-      }
+				await sendWhatsappText(
+					rawNumber,
+					option.texto_respuesta || "Sin respuesta configurada."
+				);
+				return;
+			}
 
-      await upsertUserState(normalizedNumber, "SELECCION_FECHA", { deporte_elegido: sport });
-      await sendWhatsappText(normalizedNumber, "Elegí una fecha en formato DD/MM.");
-      return;
-    }
+			let reply;
+			try {
+				reply = await askAssistant(text || "hola", "menu");
+			} catch (error) {
+				console.error("❌ Error con Gemini en menú:", error.message);
+				reply = "Ahora mismo el asistente virtual no está disponible. Escribí *menu* para ver las opciones.";
+			}
 
-    case "SELECCION_FECHA": {
-      if (!/^\d{2}\/\d{2}$/.test(text)) {
-        await sendWhatsappText(normalizedNumber, "Formato incorrecto. Usá DD/MM, por ejemplo 25/03.");
-        return;
-      }
+			await sendWhatsappText(rawNumber, reply);
+			return;
+		}
 
-      const [day, month] = text.split("/");
-      const year = new Date().getFullYear();
-      const selectedDate = new Date(year, Number(month) - 1, Number(day));
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+		case "HABLANDO_CON_IA": {
+			if (msgType !== "text") {
+				await sendWhatsappText(
+					rawNumber,
+					"En modo asistente solo puedo responder mensajes de texto. Escribí tu consulta o *menu* para volver."
+				);
+				return;
+			}
 
-      if (Number.isNaN(selectedDate.getTime()) || selectedDate < today) {
-        await sendWhatsappText(normalizedNumber, "❌ No podés elegir una fecha pasada.");
-        return;
-      }
+			if (resetCommands.has(text)) {
+				await upsertUserState(rawNumber, "INICIO");
+				await sendMainMenu(rawNumber);
+				return;
+			}
 
-      const isoDate = `${year}-${month}-${day}`;
-      const slotList = user.deporte_elegido === "futbol"
-        ? ["19:00", "21:00", "22:30"]
-        : ["18:00", "19:30", "21:00"];
+			let reply;
+			try {
+				reply = await askAssistant(text || "hola", "assistant");
+			} catch (error) {
+				console.error("❌ Error con Gemini en asistente:", error.message);
+				reply = "Ahora mismo el asistente virtual no está disponible. Escribí *menu* para volver al inicio.";
+			}
 
-      const courtCountResult = await query("SELECT COUNT(*)::int AS total FROM canchas WHERE tipo = $1", [user.deporte_elegido]);
-      const busyResult = await query(
-        `
-          SELECT hora, COUNT(*)::int AS ocupadas
-          FROM turnos
-          WHERE deporte = $1
-            AND fecha = $2
-            AND estado IN ('confirmado', 'pendiente')
-          GROUP BY hora
-        `,
-        [user.deporte_elegido, isoDate]
-      );
+			await sendWhatsappText(rawNumber, reply);
+			return;
+		}
 
-      const freeSlots = slotList.filter((slot) => {
-        const row = busyResult.rows.find((item) => item.hora.trim() === slot);
-        return !row || row.ocupadas < courtCountResult.rows[0].total;
-      });
+		case "SELECCION_DEPORTE": {
+			if (msgType !== "text") {
+				await sendWhatsappText(rawNumber, "Escribí 1 para Fútbol o 2 para Pádel.");
+				return;
+			}
 
-      if (!freeSlots.length) {
-        await sendWhatsappText(normalizedNumber, "❌ No hay horarios libres para esa fecha.");
-        return;
-      }
+			const sport = text === "1" ? "futbol" : text === "2" ? "padel" : null;
 
-      await upsertUserState(normalizedNumber, "SELECCION_HORA", {
-        deporte_elegido: user.deporte_elegido,
-        fecha_elegida: isoDate
-      });
+			if (!sport) {
+				await sendWhatsappText(rawNumber, "Escribí 1 para Fútbol o 2 para Pádel.");
+				return;
+			}
 
-      let message = "Horarios libres:\n\n";
-      freeSlots.forEach((slot, index) => {
-        message += `${index + 1}. ${slot} hs\n`;
-      });
-      await sendWhatsappText(normalizedNumber, message);
-      return;
-    }
+			await upsertUserState(rawNumber, "SELECCION_FECHA", {
+				deporte_elegido: sport
+			});
+			await sendWhatsappText(rawNumber, "Elegí una fecha en formato DD/MM.");
+			return;
+		}
 
-    case "SELECCION_HORA": {
-      const slotList = user.deporte_elegido === "futbol"
-        ? ["19:00", "21:00", "22:30"]
-        : ["18:00", "19:30", "21:00"];
-      const selectedHour = slotList[Number(text) - 1];
+		case "SELECCION_FECHA": {
+			if (msgType !== "text") {
+				await sendWhatsappText(rawNumber, "Mandame la fecha en formato DD/MM, por ejemplo 25/03.");
+				return;
+			}
 
-      if (!selectedHour) {
-        await sendWhatsappText(normalizedNumber, "Opción inválida. Elegí un número de horario.");
-        return;
-      }
+			if (!/^\d{2}\/\d{2}$/.test(text)) {
+				await sendWhatsappText(rawNumber, "Formato incorrecto. Usá DD/MM, por ejemplo 25/03.");
+				return;
+			}
 
-      const freeCourtsResult = await query(
-        `
-          SELECT id, nombre
-          FROM canchas
-          WHERE tipo = $1
-            AND id NOT IN (
-              SELECT cancha_id
-              FROM turnos
-              WHERE fecha = $2
-                AND hora = $3
-                AND estado IN ('confirmado', 'pendiente')
-            )
-          ORDER BY nombre
-        `,
-        [user.deporte_elegido, user.fecha_elegida, selectedHour]
-      );
+			const [day, month] = text.split("/");
+			const year = new Date().getFullYear();
+			const selectedDate = new Date(year, Number(month) - 1, Number(day));
+			const today = new Date();
+			today.setHours(0, 0, 0, 0);
 
-      if (!freeCourtsResult.rows.length) {
-        await sendWhatsappText(normalizedNumber, "No quedaron canchas disponibles para ese horario.");
-        return;
-      }
+			if (Number.isNaN(selectedDate.getTime()) || selectedDate < today) {
+				await sendWhatsappText(rawNumber, "❌ No podés elegir una fecha pasada.");
+				return;
+			}
 
-      await upsertUserState(normalizedNumber, "SELECCION_CANCHA", {
-        deporte_elegido: user.deporte_elegido,
-        fecha_elegida: user.fecha_elegida,
-        hora_elegida: selectedHour
-      });
+			const isoDate = `${year}-${month}-${day}`;
+			const slotList = user.deporte_elegido === "futbol"
+				? ["19:00", "21:00", "22:30"]
+				: ["18:00", "19:30", "21:00"];
 
-      let message = "Canchas disponibles:\n\n";
-      freeCourtsResult.rows.forEach((court, index) => {
-        message += `${index + 1}. ${court.nombre}\n`;
-      });
-      await sendWhatsappText(normalizedNumber, message);
-      return;
-    }
+			const courtCountResult = await query(
+				"SELECT COUNT(*)::int AS total FROM canchas WHERE tipo = $1",
+				[user.deporte_elegido]
+			);
 
-    case "SELECCION_CANCHA": {
-      const freeCourtsResult = await query(
-        `
-          SELECT id, nombre
-          FROM canchas
-          WHERE tipo = $1
-            AND id NOT IN (
-              SELECT cancha_id
-              FROM turnos
-              WHERE fecha = $2
-                AND hora = $3
-                AND estado IN ('confirmado', 'pendiente')
-            )
-          ORDER BY nombre
-        `,
-        [user.deporte_elegido, user.fecha_elegida, user.hora_elegida]
-      );
+			const busyResult = await query(
+				`
+					SELECT hora, COUNT(*)::int AS ocupadas
+					FROM turnos
+					WHERE deporte = $1
+					  AND fecha = $2
+					  AND estado IN ('confirmado', 'pendiente')
+					GROUP BY hora
+				`,
+				[user.deporte_elegido, isoDate]
+			);
 
-      const selectedCourt = freeCourtsResult.rows[Number(text) - 1];
-      if (!selectedCourt) {
-        await sendWhatsappText(normalizedNumber, "Opción inválida. Elegí una cancha de la lista.");
-        return;
-      }
+			const totalCourts = Number(courtCountResult.rows[0]?.total || 0);
 
-      await upsertUserState(normalizedNumber, "ESPERANDO_COMPROBANTE", {
-        deporte_elegido: user.deporte_elegido,
-        fecha_elegida: user.fecha_elegida,
-        hora_elegida: user.hora_elegida,
-        cancha_elegida_id: selectedCourt.id
-      });
+			const freeSlots = slotList.filter((slot) => {
+				const row = busyResult.rows.find((item) => String(item.hora).trim() === slot);
+				return !row || Number(row.ocupadas) < totalCourts;
+			});
 
-      await sendWhatsappText(
-        normalizedNumber,
-        `Perfecto, elegiste *${selectedCourt.nombre}*.\n\nAhora enviá una foto o PDF del comprobante, o escribí el número de operación.`
-      );
-      return;
-    }
+			if (!freeSlots.length) {
+				await sendWhatsappText(rawNumber, "❌ No hay horarios libres para esa fecha.");
+				return;
+			}
 
-    case "ESPERANDO_COMPROBANTE": {
-      let receiptPath = text || "Comprobante informado por texto";
+			await upsertUserState(rawNumber, "SELECCION_HORA", {
+				deporte_elegido: user.deporte_elegido,
+				fecha_elegida: isoDate
+			});
 
-      if (msgType === "image" || msgType === "document") {
-        try {
-          const media = msgType === "image" ? msg.image : msg.document;
-          receiptPath = await storeWhatsappMedia(media, msgType);
-        } catch (error) {
-          console.error("No se pudo guardar el comprobante:", error.message);
-          receiptPath = "Error al guardar comprobante";
-        }
-      }
+			let message = "Horarios libres:\n\n";
+			freeSlots.forEach((slot, index) => {
+				message += `${index + 1}. ${slot} hs\n`;
+			});
 
-      await query(
-        `
-          INSERT INTO turnos (numero_whatsapp, deporte, fecha, hora, cancha_id, estado, comprobante_url)
-          VALUES ($1, $2, $3, $4, $5, 'pendiente', $6)
-        `,
-        [
-          normalizedNumber,
-          user.deporte_elegido,
-          user.fecha_elegida,
-          user.hora_elegida,
-          user.cancha_elegida_id,
-          receiptPath
-        ]
-      );
+			await sendWhatsappText(rawNumber, message);
+			return;
+		}
 
-      await upsertUserState(normalizedNumber, "INICIO");
-      await sendWhatsappText(
-        normalizedNumber,
-        "⏳ *¡Comprobante recibido!*\n\nTu turno quedó pendiente de revisión. Apenas lo validemos, te avisamos por acá."
-      );
-      return;
-    }
+		case "SELECCION_HORA": {
+			if (msgType !== "text") {
+				await sendWhatsappText(rawNumber, "Elegí un horario escribiendo el número de la lista.");
+				return;
+			}
 
-    default:
-      await upsertUserState(normalizedNumber, "INICIO");
-      await sendMainMenu(normalizedNumber);
-  }
+			const slotList = user.deporte_elegido === "futbol"
+				? ["19:00", "21:00", "22:30"]
+				: ["18:00", "19:30", "21:00"];
+
+			const selectedHour = slotList[Number(text) - 1];
+
+			if (!selectedHour) {
+				await sendWhatsappText(rawNumber, "Opción inválida. Elegí un número de horario.");
+				return;
+			}
+
+			const freeCourtsResult = await query(
+				`
+					SELECT id, nombre
+					FROM canchas
+					WHERE tipo = $1
+					  AND id NOT IN (
+						SELECT cancha_id
+						FROM turnos
+						WHERE fecha = $2
+						  AND hora = $3
+						  AND estado IN ('confirmado', 'pendiente')
+					  )
+					ORDER BY nombre
+				`,
+				[user.deporte_elegido, user.fecha_elegida, selectedHour]
+			);
+
+			if (!freeCourtsResult.rows.length) {
+				await sendWhatsappText(rawNumber, "No quedaron canchas disponibles para ese horario.");
+				return;
+			}
+
+			await upsertUserState(rawNumber, "SELECCION_CANCHA", {
+				deporte_elegido: user.deporte_elegido,
+				fecha_elegida: user.fecha_elegida,
+				hora_elegida: selectedHour
+			});
+
+			let message = "Canchas disponibles:\n\n";
+			freeCourtsResult.rows.forEach((court, index) => {
+				message += `${index + 1}. ${court.nombre}\n`;
+			});
+
+			await sendWhatsappText(rawNumber, message);
+			return;
+		}
+
+		case "SELECCION_CANCHA": {
+			if (msgType !== "text") {
+				await sendWhatsappText(rawNumber, "Elegí una cancha escribiendo el número de la lista.");
+				return;
+			}
+
+			const freeCourtsResult = await query(
+				`
+					SELECT id, nombre
+					FROM canchas
+					WHERE tipo = $1
+					  AND id NOT IN (
+						SELECT cancha_id
+						FROM turnos
+						WHERE fecha = $2
+						  AND hora = $3
+						  AND estado IN ('confirmado', 'pendiente')
+					  )
+					ORDER BY nombre
+				`,
+				[user.deporte_elegido, user.fecha_elegida, user.hora_elegida]
+			);
+
+			const selectedCourt = freeCourtsResult.rows[Number(text) - 1];
+
+			if (!selectedCourt) {
+				await sendWhatsappText(rawNumber, "Opción inválida. Elegí una cancha de la lista.");
+				return;
+			}
+
+			await upsertUserState(rawNumber, "ESPERANDO_COMPROBANTE", {
+				deporte_elegido: user.deporte_elegido,
+				fecha_elegida: user.fecha_elegida,
+				hora_elegida: user.hora_elegida,
+				cancha_elegida_id: selectedCourt.id
+			});
+
+			await sendWhatsappText(
+				rawNumber,
+				`Perfecto, elegiste *${selectedCourt.nombre}*.\n\nAhora enviá una foto o PDF del comprobante, o escribí el número de operación.`
+			);
+			return;
+		}
+
+		case "ESPERANDO_COMPROBANTE": {
+			let receiptPath = null;
+
+			if (msgType === "text" && text) {
+				receiptPath = text;
+			} else if (msgType === "image" || msgType === "document") {
+				try {
+					const media = msgType === "image" ? msg.image : msg.document;
+					receiptPath = await storeWhatsappMedia(media, msgType);
+				} catch (error) {
+					console.error("No se pudo guardar el comprobante:", error.message);
+					await sendWhatsappText(
+						rawNumber,
+						"No pude guardar el comprobante. Probá de nuevo mandando una foto, PDF o número de operación."
+					);
+					return;
+				}
+			} else {
+				await sendWhatsappText(
+					rawNumber,
+					"Mandame una foto, PDF del comprobante o escribí el número de operación."
+				);
+				return;
+			}
+
+			await query(
+				`
+					INSERT INTO turnos (
+						numero_whatsapp,
+						deporte,
+						fecha,
+						hora,
+						cancha_id,
+						estado,
+						comprobante_url
+					)
+					VALUES ($1, $2, $3, $4, $5, 'pendiente', $6)
+				`,
+				[
+					rawNumber,
+					user.deporte_elegido,
+					user.fecha_elegida,
+					user.hora_elegida,
+					user.cancha_elegida_id,
+					receiptPath
+				]
+			);
+
+			await upsertUserState(rawNumber, "INICIO");
+			await sendWhatsappText(
+				rawNumber,
+				"⏳ *¡Comprobante recibido!*\n\nTu turno quedó pendiente de revisión. Apenas lo validemos, te avisamos por acá."
+			);
+			return;
+		}
+
+		default: {
+			await upsertUserState(rawNumber, "INICIO");
+			await sendMainMenu(rawNumber);
+		}
+	}
 }
 
 app.get("/", (req, res) => {
