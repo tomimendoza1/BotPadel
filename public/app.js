@@ -281,19 +281,27 @@ async function loadEverything() {
 }
 
 async function updateBookingStatus(id, accion) {
-  const label = accion === "confirmar" ? "aprobar" : "rechazar";
-  if (!confirm(`¿Seguro que querés ${label} esta reserva?`)) return;
+	const bookingId = Number(id);
+	const label = accion === "confirmar" ? "aprobar" : "rechazar";
 
-  try {
-    await api(`/api/reservas/${id}/estado`, {
-      method: "POST",
-      body: JSON.stringify({ accion })
-    });
-    showToast(`Reserva ${label === "aprobar" ? "aprobada" : "rechazada"}.`);
-    await Promise.all([loadReservations(), loadSummary()]);
-  } catch (error) {
-    showToast(error.message, "error");
-  }
+	if (!Number.isInteger(bookingId) || bookingId <= 0) {
+		showToast("ID de reserva inválido.", "error");
+		return;
+	}
+
+	if (!confirm(`¿Seguro que querés ${label} esta reserva?`)) return;
+
+	try {
+		await api(`/api/reservas/${bookingId}/estado`, {
+			method: "POST",
+			body: JSON.stringify({ accion })
+		});
+
+		showToast(`Reserva ${label === "aprobar" ? "aprobada" : "rechazada"}.`);
+		await Promise.all([loadReservations(), loadSummary()]);
+	} catch (error) {
+		showToast(error.message, "error");
+	}
 }
 
 async function verifySession() {

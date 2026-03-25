@@ -563,27 +563,58 @@ app.post("/api/reservas", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/reservas/:id/estado", requireAuth, asyncHandler(async (req, res) => {
-  const bookingId = req.params.id;
-  const action = req.body?.accion;
+	const bookingId = Number(req.params.id);
+	const action = req.body?.accion;
 
-  const bookingResult = await query("SELECT * FROM turnos WHERE id = $1", [bookingId]);
-  const booking = bookingResult.rows[0];
+	console.log("📌 Cambio de estado reserva:", {
+		bookingIdRaw: req.params.id,
+		bookingId,
+		action
+	});
 
-  if (!booking) {
-    return res.status(404).json({ error: "Reserva no encontrada" });
-  }
+	if (!Number.isInteger(bookingId) || bookingId <= 0) {
+		return res.status(400).json({ error: "ID de reserva inválido" });
+	}
 
-  if (action === "confirmar") {
-    await query("UPDATE turnos SET estado = 'confirmado' WHERE id = $1", [bookingId]);
-    await sendWhatsappText(booking.numero_whatsapp, "✅ *¡Tu reserva fue confirmada!*\nYa verificamos el pago. Te esperamos.");
-  } else if (action === "rechazar") {
-    await query("DELETE FROM turnos WHERE id = $1", [bookingId]);
-    await sendWhatsappText(booking.numero_whatsapp, "❌ *Tu reserva fue rechazada.*\nHubo un problema con el comprobante o el pago. Escribinos para revisarlo.");
-  } else {
-    return res.status(400).json({ error: "Acción inválida" });
-  }
+	if (action === "confirmar") {
+		const result = await query(
+			"UPDATE turnos SET estado = 'confirmado' WHERE id = $1 RETURNING *",
+			[bookingId]
+		);
 
-  res.json({ ok: true });
+		const booking = result.rows[0];
+		if (!booking) {
+			return res.status(404).json({ error: "Reserva no encontrada" });
+		}
+
+		await sendWhatsappText(
+			booking.numero_whatsapp,
+			"✅ *¡Tu reserva fue confirmada!*\nYa verificamos el pago. Te esperamos."
+		);
+
+		return res.json({ ok: true });
+	}
+
+	if (action === "rechazar") {
+		const result = await query(
+			"DELETE FROM turnos WHERE id = $1 RETURNING *",
+			[bookingId]
+		);
+
+		const booking = result.rows[0];
+		if (!booking) {
+			return res.status(404).json({ error: "Reserva no encontrada" });
+		}
+
+		await sendWhatsappText(
+			booking.numero_whatsapp,
+			"❌ *Tu reserva fue rechazada.*\nHubo un problema con el comprobante o el pago. Escribinos para revisarlo."
+		);
+
+		return res.json({ ok: true });
+	}
+
+	return res.status(400).json({ error: "Acción inválida" });
 }));
 
 app.get("/api/media/:id", requireAuth, asyncHandler(async (req, res) => {
