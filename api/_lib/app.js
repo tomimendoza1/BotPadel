@@ -582,26 +582,44 @@ app.post("/api/reservas/:id/estado", requireAuth, asyncHandler(async (req, res) 
     return res.status(404).json({ error: "Reserva no encontrada" });
   }
 
-  let messageSent = true;
+let whatsapp = {
+  sent: false,
+  error: null,
+  mode: null
+};
 
-  try {
-    if (action === "confirmar") {
-      await sendWhatsappText(
-        booking.numero_whatsapp,
-        "✅ *¡Tu reserva fue confirmada!*\nYa verificamos el pago. Te esperamos."
-      );
-    } else {
-      await sendWhatsappText(
-        booking.numero_whatsapp,
-        "❌ *Tu reserva fue rechazada.*\nHubo un problema con el comprobante o el pago. Escribinos para revisarlo."
-      );
-    }
-  } catch (error) {
-    messageSent = false;
-    console.error("No se pudo enviar el mensaje al usuario:", error.message);
+try {
+  if (action === "confirmar") {
+    await sendWhatsappText(
+      booking.numero_whatsapp,
+      "✅ ¡Tu reserva fue confirmada!\nYa verificamos el pago. Te esperamos."
+    );
+  } else {
+    await sendWhatsappText(
+      booking.numero_whatsapp,
+      "❌ Tu reserva fue rechazada.\nHubo un problema con el comprobante o el pago. Escribinos para revisarlo."
+    );
   }
 
-  res.json({ ok: true, messageSent });
+  whatsapp = {
+    sent: true,
+    error: null,
+    mode: "text"
+  };
+} catch (error) {
+  const metaError = error.response?.data?.error;
+  whatsapp = {
+    sent: false,
+    error: metaError?.message || error.message || "Error desconocido",
+    mode: null
+  };
+
+  console.error("No se pudo enviar el mensaje al usuario:");
+  console.error("Status:", error.response?.status);
+  console.error("Meta error:", JSON.stringify(metaError, null, 2));
+}
+
+res.json({ ok: true, whatsapp });
 }));
 
 app.get("/api/media/:id", requireAuth, asyncHandler(async (req, res) => {
