@@ -63,22 +63,31 @@ async function bootstrapSystemData() {
   return bootstrapPromise;
 }
 
-async function askAssistant(userText, mode = "menu") {
-  if (!genAI) {
-    return mode === "menu"
-      ? 'Escribí *menu* para ver las opciones disponibles.'
-      : 'Ahora mismo no tengo la IA conectada. Escribí *menu* para volver al inicio.';
-  }
+async function askAssistant(prompt) {
+	try {
+		if (!process.env.GEMINI_API_KEY) {
+			return "Ahora mismo no tengo disponible la respuesta automática. Escribinos y te ayudamos con la reserva.";
+		}
 
-  const prompt = mode === "menu"
-    ? `Sos el asistente virtual de un complejo de canchas de fútbol y pádel en Argentina. El usuario escribió: "${userText}".
-Respondé en español rioplatense, corto, amable y claro.
-Siempre cerrá invitando a escribir "menu" para ver opciones o elegir el asistente virtual.`
-    : `Sos el asistente virtual de un complejo deportivo. Respondé en español rioplatense, de forma útil, amable y concreta. Consulta del usuario: "${userText}".`;
+		const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+		const result = await model.generateContent(prompt);
+		const response = await result.response;
+		const text = response.text();
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+		return text?.trim() || "Ahora mismo no pude generar una respuesta automática. Escribinos y te ayudamos con la reserva.";
+	} catch (error) {
+		console.error("❌ Error con Gemini:", error.message);
+
+		if (error?.status === 429) {
+			return "Ahora mismo estamos con mucha demanda y la respuesta automática está temporalmente no disponible. Escribinos igual y te ayudamos con tu reserva.";
+		}
+
+		if (error?.status === 403) {
+			return "La asistencia automática no está disponible en este momento. Escribinos y te ayudamos con tu reserva.";
+		}
+
+		return "Ahora mismo no tengo disponible la respuesta automática. Escribinos y te ayudamos con tu reserva.";
+	}
 }
 
 async function storeWhatsappMedia(media, mediaType) {
