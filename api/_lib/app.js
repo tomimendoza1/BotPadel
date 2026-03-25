@@ -544,55 +544,55 @@ app.get("/api/reservas", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/reservas/:id/estado", requireAuth, asyncHandler(async (req, res) => {
-	const bookingId = Number(req.params.id);
-	const action = req.body?.accion;
+  const bookingId = Number(req.params.id);
+  const action = req.body?.accion;
 
-	if (!Number.isInteger(bookingId) || bookingId <= 0) {
-		return res.status(400).json({ error: "ID inválido" });
-	}
+  if (!Number.isInteger(bookingId) || bookingId <= 0) {
+    return res.status(400).json({ error: "ID inválido" });
+  }
 
-	let booking;
+  let booking;
 
-	if (action === "confirmar") {
-		const result = await query(
-			"UPDATE turnos SET estado = 'confirmado' WHERE id = $1 RETURNING *",
-			[bookingId]
-		);
-		booking = result.rows[0];
-	} else if (action === "rechazar") {
-		const result = await query(
-			"DELETE FROM turnos WHERE id = $1 RETURNING *",
-			[bookingId]
-		);
-		booking = result.rows[0];
-	} else {
-		return res.status(400).json({ error: "Acción inválida" });
-	}
+  if (action === "confirmar") {
+    const result = await query(
+      "UPDATE turnos SET estado = 'confirmado' WHERE id = $1 RETURNING *",
+      [bookingId]
+    );
+    booking = result.rows[0];
+  } else if (action === "rechazar") {
+    const result = await query(
+      "DELETE FROM turnos WHERE id = $1 RETURNING *",
+      [bookingId]
+    );
+    booking = result.rows[0];
+  } else {
+    return res.status(400).json({ error: "Acción inválida" });
+  }
 
-	if (!booking) {
-		return res.status(404).json({ error: "Reserva no encontrada" });
-	}
+  if (!booking) {
+    return res.status(404).json({ error: "Reserva no encontrada" });
+  }
 
-	let messageSent = true;
+  let messageSent = true;
 
-	try {
-		if (action === "confirmar") {
-			await sendWhatsappText(
-				booking.numero_whatsapp,
-				"✅ *¡Tu reserva fue confirmada!*\nYa verificamos el pago. Te esperamos."
-			);
-		} else {
-			await sendWhatsappText(
-				booking.numero_whatsapp,
-				"❌ *Tu reserva fue rechazada.*\nHubo un problema con el comprobante o el pago. Escribinos para revisarlo."
-			);
-		}
-	} catch (error) {
-		messageSent = false;
-		console.error("No se pudo enviar el mensaje al usuario:", error.message);
-	}
+  try {
+    if (action === "confirmar") {
+      await sendWhatsappText(
+        booking.numero_whatsapp,
+        "✅ *¡Tu reserva fue confirmada!*\nYa verificamos el pago. Te esperamos."
+      );
+    } else {
+      await sendWhatsappText(
+        booking.numero_whatsapp,
+        "❌ *Tu reserva fue rechazada.*\nHubo un problema con el comprobante o el pago. Escribinos para revisarlo."
+      );
+    }
+  } catch (error) {
+    messageSent = false;
+    console.error("No se pudo enviar el mensaje al usuario:", error.message);
+  }
 
-	res.json({ ok: true, messageSent });
+  res.json({ ok: true, messageSent });
 }));
 
 app.get("/api/media/:id", requireAuth, asyncHandler(async (req, res) => {
