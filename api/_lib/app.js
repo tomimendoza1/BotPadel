@@ -590,15 +590,19 @@ let whatsapp = {
 
 try {
   if (action === "confirmar") {
-    await sendWhatsappText(
-      booking.numero_whatsapp,
-      "✅ ¡Tu reserva fue confirmada!\nYa verificamos el pago. Te esperamos."
-    );
+    const to = normalizeArgentinaWhatsappNumber(booking.numero_whatsapp);
+
+await sendWhatsappText(
+  to,
+  "✅ ¡Tu reserva fue confirmada!\nYa verificamos el pago. Te esperamos."
+);
   } else {
-    await sendWhatsappText(
-      booking.numero_whatsapp,
-      "❌ Tu reserva fue rechazada.\nHubo un problema con el comprobante o el pago. Escribinos para revisarlo."
-    );
+    const to = normalizeArgentinaWhatsappNumber(booking.numero_whatsapp);
+
+await sendWhatsappText(
+  to,
+  "✅ ¡Tu reserva fue confirmada!\nYa verificamos el pago. Te esperamos."
+);
   }
 
   whatsapp = {
