@@ -5,7 +5,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { query } = require("./db");
 const { requireAuth, setAuthCookie, clearAuthCookie, getSessionFromRequest } = require("./auth");
 const { normalizeArgentinaWhatsappNumber } = require("./number");
-const { sendWhatsappText, getMediaMeta, downloadMediaBuffer } = require("./whatsapp");
+const { sendWhatsappText, sendWhatsappTemplate, getMediaMeta, downloadMediaBuffer } = require("./whatsapp");
 
 const app = express();
 const publicDir = path.join(process.cwd(), "public");

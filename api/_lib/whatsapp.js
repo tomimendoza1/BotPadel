@@ -7,6 +7,53 @@ function getWhatsappCredentials() {
   };
 }
 
+async function sendWhatsappTemplate(to, templateName, bodyParameters = [], languageCode = "es_AR") {
+	const { token, phoneNumberId } = getWhatsappCredentials();
+
+	if (!token || !phoneNumberId) {
+		throw new Error("Faltan WA_ACCESS_TOKEN o WA_PHONE_NUMBER_ID");
+	}
+
+	const components = bodyParameters.length
+		? [
+				{
+					type: "body",
+					parameters: bodyParameters.map((value) => ({
+						type: "text",
+						text: String(value ?? "")
+					}))
+				}
+		  ]
+		: [];
+
+	console.log("📤 Enviando template WhatsApp a:", to);
+	console.log("🧩 Template:", templateName, bodyParameters);
+
+	const response = await axios.post(
+		`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`,
+		{
+			messaging_product: "whatsapp",
+			to,
+			type: "template",
+			template: {
+				name: templateName,
+				language: { code: languageCode },
+				components
+			}
+		},
+		{
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json"
+			},
+			timeout: 15000
+		}
+	);
+
+	return response.data;
+}
+
+
 async function sendWhatsappText(to, body) {
   const { token, phoneNumberId } = getWhatsappCredentials();
 
@@ -72,7 +119,8 @@ async function downloadMediaBuffer(url) {
 }
 
 module.exports = {
-  sendWhatsappText,
-  getMediaMeta,
-  downloadMediaBuffer
+	sendWhatsappText,
+	sendWhatsappTemplate,
+	getMediaMeta,
+	downloadMediaBuffer
 };
