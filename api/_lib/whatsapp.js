@@ -1,5 +1,8 @@
 const axios = require("axios");
 
+const creds = getWhatsappCredentials();
+console.log(`[WA BOOT][PID ${process.pid}] phoneNumberId=${creds.phoneNumberId} token=*${String(creds.token || "").slice(-8)}`);
+
 function getWhatsappCredentials() {
   return {
     token: process.env.WA_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN,
@@ -9,7 +12,8 @@ function getWhatsappCredentials() {
 
 async function sendWhatsappTemplate(to, templateName, bodyParameters = [], languageCode = "es_AR") {
 	const { token, phoneNumberId } = getWhatsappCredentials();
-
+  const suffix = String(token || "").slice(-8);
+  console.log(`[WA TEMPLATE][PID ${process.pid}] to=${to} phoneNumberId=${phoneNumberId} token=*${suffix} template=${templateName}`);
 	if (!token || !phoneNumberId) {
 		throw new Error("Faltan WA_ACCESS_TOKEN o WA_PHONE_NUMBER_ID");
 	}
@@ -56,7 +60,8 @@ async function sendWhatsappTemplate(to, templateName, bodyParameters = [], langu
 
 async function sendWhatsappText(to, body) {
   const { token, phoneNumberId } = getWhatsappCredentials();
-
+  const suffix = String(token || "").slice(-8);
+  console.log(`[WA TEXT][PID ${process.pid}] to=${to} phoneNumberId=${phoneNumberId} token=*${suffix}`);
   if (!token || !phoneNumberId) {
     console.warn("⚠️ Faltan WA_ACCESS_TOKEN / WA_PHONE_NUMBER_ID");
     return { skipped: true };
@@ -65,7 +70,7 @@ async function sendWhatsappText(to, body) {
   try {
     console.log("📤 Enviando WhatsApp a:", to);
     console.log("📝 Texto:", body);
-
+    
     const response = await axios.post(
       `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`,
       {
